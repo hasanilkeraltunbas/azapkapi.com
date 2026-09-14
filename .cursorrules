@@ -1,0 +1,23 @@
+# Project Overview: azapkapi.com
+You are building the official, production-ready web application for "Azapkapı" (azapkapi.com), an upscale historical-modern lifestyle hub in Istanbul.
+
+## Brand Architecture & Routing
+1. `/` (Landing Page): Editorial, luxury hero introducing the 3 sub-brands:
+   - Azapkapı Garden (Bistro, courtyard café, open-air daytime/evening space)
+   - Azapkapı Rooms (Boutique accommodation, luxury suites)
+   - Azapkapı Teras (Rooftop lounge, sunset cocktails)
+2. `/garden`: Courtyard atmosphere, digital menu preview, and table reservation booking flow.
+3. `/rooms`: Showcase of boutique rooms (amenities, photo gallery, starting prices) with check-in/check-out reservation flow.
+4. `/teras`: Sophisticated "Coming Soon / Çok Yakında" teaser page with sunset imagery and a VIP launch email waitlist form.
+5. `/admin`: Minimalist, password-protected back-office view to filter and manage incoming reservations (toggle between Rooms, Garden, and Waitlist).
+
+## Tech Stack
+- Next.js 14+ (App Router), TypeScript, Tailwind CSS, Lucide Icons, Framer Motion.
+- Supabase (PostgreSQL) for database.
+- Resend for transactional OTP emails.
+
+## Design Guidelines & Aesthetics
+- Aesthetic: Understated luxury, warm editorial feel inspired by Istanbul's historic Haliç / Beyoğlu heritage.
+- Color Palette: Deep charcoal/anthracite (#1A1A1A), warm limestone/cream (#F9F6F0, #EFECE6), muted olive/sage (#4A5240), subtle brass accents.
+- Typography: Serif headings (e.g. Playfair/Cormorant) with clean Sans-serif body.
+- Mobile-first, fast-loading, clean layout.
