@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Field, Label, SelectField, SubmitButton } from "@/components/form-fields";
 import { gardenTimes } from "@/lib/site";
 
@@ -14,7 +14,7 @@ export function GardenReservationForm() {
   const [errorMsg, setErrorMsg] = useState("");
 
   // Rezervasyon verileri
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(todayIso());
   const [time, setTime] = useState(gardenTimes[4]);
   const [guests, setGuests] = useState("2");
   const [name, setName] = useState("");
@@ -22,13 +22,53 @@ export function GardenReservationForm() {
   const [phone, setPhone] = useState("");
   const [note, setNote] = useState("");
 
+  // Dolu saatler listesi
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
   // Doğrulama kodu kontrolleri
   const [sentCode, setSentCode] = useState("");
   const [inputCode, setInputCode] = useState("");
 
+  // Tarih değiştikçe o günün dolu saatlerini Supabase'den çek
+  useEffect(() => {
+    if (!date) return;
+    
+    async function fetchBookedSlots() {
+      setLoadingSlots(true);
+      try {
+        const res = await fetch(`/api/reservation/booked-slots?date=${date}`);
+        if (res.ok) {
+          const data = await res.json();
+          setBookedSlots(data.bookedSlots || []);
+          
+          // Eğer seçili olan saat dolu saatler arasına girdiyse, boş olan ilk saati seç
+          if (data.bookedSlots?.includes(time)) {
+            const firstAvailable = gardenTimes.find((slot) => !data.bookedSlots.includes(slot));
+            if (firstAvailable) setTime(firstAvailable);
+          }
+        }
+      } catch (err) {
+        console.error("Dolu saatler alınamadı:", err);
+      } finally {
+        setLoadingSlots(false);
+      }
+    }
+
+    fetchBookedSlots();
+  }, [date]);
+
   function onStay(e: FormEvent) {
     e.preventDefault();
-    if (!date) return;
+    if (!date || !time) return;
+    
+    // Güvenlik kontrolü: Seçilen saat doluysa ilerletme
+    if (bookedSlots.includes(time)) {
+      setErrorMsg("Seçtiğiniz saat az önce rezerve edildi. Lütfen başka bir saat seçin.");
+      return;
+    }
+
+    setErrorMsg("");
     setStep(2);
   }
 
@@ -37,7 +77,6 @@ export function GardenReservationForm() {
     setPending(true);
     setErrorMsg("");
 
-    // 6 haneli rastgele kod
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     setSentCode(code);
 
@@ -71,8 +110,7 @@ export function GardenReservationForm() {
 
     setPending(true);
     try {
-      // Mekan sahibine rezervasyon detaylarını mail at
-      await fetch("/api/reservation", {
+      const res = await fetch("/api/reservation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -86,9 +124,16 @@ export function GardenReservationForm() {
         }),
       });
 
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Rezervasyon kaydedilemedi.");
+      }
+
       setStep("done");
-    } catch {
-      setErrorMsg("Rezervasyon kaydedilirken bir sorun oluştu. Lütfen tekrar deneyin.");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Rezervasyon kaydedilirken bir sorun oluştu.");
+      setStep(1); // Çakışma durumunda kullanıcıyı tekrar tarih/saat seçimine döndür
     } finally {
       setPending(false);
     }
@@ -97,15 +142,15 @@ export function GardenReservationForm() {
   if (step === "done") {
     return (
       <div className="rounded-2xl border border-olive/20 bg-limestone px-6 py-10 text-center">
-        <p className="text-sm text-olive">Rezervasyon Onaylandı</p>
+        <p className="text-sm text-olive">Rezervasyon Talebi Alındı (Onay Bekliyor)</p>
         <p className="mt-3 font-display text-3xl font-medium tracking-tight text-charcoal">
-          Çimde yerin hazır!
+          Talebiniz bize ulaştı!
         </p>
         <p className="mt-3 text-sm leading-7 text-charcoal/70">
           {name} · {date} · {time} · {guests} kişi
         </p>
         <p className="mt-1 text-xs text-charcoal/50">
-          Onay bilgileri {email} adresine iletildi.
+          İşletme onayından sonra {email} adresine kesin teyit maili gönderilecektir.
         </p>
       </div>
     );
@@ -114,6 +159,12 @@ export function GardenReservationForm() {
   if (step === 1) {
     return (
       <form onSubmit={onStay} className="space-y-8">
+        {errorMsg && (
+          <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">
+            {errorMsg}
+          </p>
+        )}
+
         <div className="grid gap-8 sm:grid-cols-3">
           <div className="flex flex-col gap-2">
             <Label htmlFor="garden-date">Tarih</Label>
@@ -127,17 +178,22 @@ export function GardenReservationForm() {
             />
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="garden-time">Saat</Label>
+            <Label htmlFor="garden-time">
+              Saat {loadingSlots && <span className="text-xs text-olive font-normal">(Yükleniyor...)</span>}
+            </Label>
             <SelectField
               id="garden-time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
             >
-              {gardenTimes.map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
-                </option>
-              ))}
+              {gardenTimes.map((slot) => {
+                const isBooked = bookedSlots.includes(slot);
+                return (
+                  <option key={slot} value={slot} disabled={isBooked}>
+                    {slot} {isBooked ? "(Dolu / Rezerve)" : ""}
+                  </option>
+                );
+              })}
             </SelectField>
           </div>
           <div className="flex flex-col gap-2">
@@ -268,7 +324,7 @@ export function GardenReservationForm() {
         />
       </div>
 
-      <SubmitButton>Rezervasyonu Onayla</SubmitButton>
+      <SubmitButton pending={pending}>Rezervasyonu Onayla</SubmitButton>
     </form>
   );
 }
